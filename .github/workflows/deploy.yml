@@ -120,7 +120,7 @@ jobs:
             aws lambda create-function-url-config \
               --function-name ${{ env.FUNCTION_NAME }}-${{ env.ENVIRONMENT }} \
               --auth-type NONE \
-              --cors 'AllowOrigins=*,AllowMethods=GET,AllowMethods=POST,AllowMethods=OPTIONS,AllowHeaders=*'
+              --cors '{"AllowOrigins":["*"],"AllowMethods":["*"],"AllowHeaders":["*"]}'
 
             # Add permission for public access
             aws lambda add-permission \
