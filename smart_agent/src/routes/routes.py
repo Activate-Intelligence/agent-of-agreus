@@ -25,6 +25,7 @@ class InputItem(BaseModel):
 class ExecuteRequest(BaseModel):
     id: Optional[str] = None
     inputs: List[InputItem] = Field(default_factory=list)
+    webhookUrl: Optional[str] = None
 
 
 class AbortRequest(BaseModel):
@@ -59,7 +60,8 @@ async def execute_endpoint(request: ExecuteRequest):
 
     result = execute({
         "id": request.id,
-        "inputs": inputs_list
+        "inputs": inputs_list,
+        "webhookUrl": request.webhookUrl
     })
 
     if "error" in result:

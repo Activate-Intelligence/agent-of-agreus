@@ -116,11 +116,13 @@ def execute(request_data: Dict[str, Any]) -> Dict[str, Any]:
     # Get or generate job ID
     job_id = request_data.get('id') or generate_job_id()
     inputs = request_data.get('inputs', [])
+    webhook_url = request_data.get('webhookUrl')
 
-    # Save job to database
+    # Save job to database with webhook URL
     save_job(job_id, {
         "inputs": inputs,
-        "status": "pending"
+        "status": "pending",
+        "webhookUrl": webhook_url
     })
 
     # For synchronous execution (default for Lambda)
@@ -145,11 +147,13 @@ async def execute_background(request_data: Dict[str, Any]) -> Dict[str, Any]:
     """
     job_id = request_data.get('id') or generate_job_id()
     inputs = request_data.get('inputs', [])
+    webhook_url = request_data.get('webhookUrl')
 
-    # Save job to database
+    # Save job to database with webhook URL
     save_job(job_id, {
         "inputs": inputs,
-        "status": "pending"
+        "status": "pending",
+        "webhookUrl": webhook_url
     })
 
     # Start async execution

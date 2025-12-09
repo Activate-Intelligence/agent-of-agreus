@@ -2,15 +2,13 @@
 Webhook utilities for sending status updates and results.
 """
 
-import os
+import json
 import requests
 from typing import Dict, Any, Optional
 from smart_agent.src.config.logger import Logger
+from smart_agent.src.utils.temp_db import get_job
 
 logger = Logger()
-
-# Webhook URL from environment
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")
 
 
 def call_webhook(
@@ -29,23 +27,27 @@ def call_webhook(
     Returns:
         True if successful, False otherwise
     """
-    if not WEBHOOK_URL:
-        logger.debug(f"No webhook URL configured, skipping callback for job {job_id}")
-        return True
-
     if not job_id:
         logger.warning("No job ID provided for webhook callback")
         return False
 
+    # Get webhook URL from job storage
+    job = get_job(job_id)
+    webhook_url = job.get("webhookUrl") if job else None
+
+    if not webhook_url:
+        logger.debug(f"No webhook URL configured for job {job_id}")
+        return True
+
     try:
-        full_payload = {
+        full_payload = json.dumps({
             "id": job_id,
             **payload
-        }
+        })
 
         response = requests.post(
-            WEBHOOK_URL,
-            json=full_payload,
+            webhook_url,
+            data=full_payload,
             timeout=timeout,
             headers={"Content-Type": "application/json"}
         )
@@ -103,10 +105,9 @@ def call_webhook_with_error(
         True if successful, False otherwise
     """
     payload = {
-        "status": "error",
-        "error": {
-            "message": error_message,
-            "code": error_code
+        "status": "failed",
+        "data": {
+            "reason": error_message
         }
     }
     return call_webhook(job_id, payload)
