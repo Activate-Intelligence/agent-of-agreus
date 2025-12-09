@@ -76,15 +76,22 @@ def load_config():
     environment = os.environ.get('ENVIRONMENT', 'dev')
     ssm_prefix = os.environ.get('SSM_PREFIX', f'/app/{agent_name}/{environment}')
 
+    print(f"Loading SSM parameters from: {ssm_prefix}")
     ssm_params = get_ssm_parameters(ssm_prefix)
+    print(f"Loaded {len(ssm_params)} parameters from SSM: {list(ssm_params.keys())}")
 
     for param_name in parameter_aliases.keys():
         value = resolve_parameter_name(param_name, ssm_params)
         if value and param_name not in os.environ:
             os.environ[param_name] = value
+            print(f"Set {param_name} from SSM")
 
     if 'ENVIRONMENT_MODE' not in os.environ:
         os.environ['ENVIRONMENT_MODE'] = 'prod'
+
+    # Debug: print if ANTHROPIC_API_KEY was loaded
+    api_key = os.environ.get('ANTHROPIC_API_KEY', '')
+    print(f"ANTHROPIC_API_KEY loaded: {'Yes' if api_key else 'No'} (length: {len(api_key)})")
 
 
 # Load configuration on module import
