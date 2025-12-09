@@ -8,25 +8,26 @@
   "maxThreads": 1,
   "inputs": [
     {
-      "name": "instructions",
       "label": "Instructions",
       "type": "longText",
+      "name": "instructions",
       "validation": {
         "required": false
       }
     },
     {
-      "name": "payload",
       "label": "Payload",
       "type": "longText",
+      "name": "payload",
       "validation": {
-        "required": true
+        "required": true,
+        "error": "Payload is required"
       }
     },
     {
-      "name": "threadId",
       "label": "Thread ID",
       "type": "longText",
+      "name": "threadId",
       "validation": {
         "required": false
       }
@@ -35,17 +36,14 @@
   "outputs": [
     {
       "label": "output",
-      "name": "output",
       "type": "longText"
     },
     {
       "label": "explanation",
-      "name": "explanation",
       "type": "longText"
     },
     {
       "label": "threadId",
-      "name": "threadId",
       "type": "shortText"
     }
   ]
