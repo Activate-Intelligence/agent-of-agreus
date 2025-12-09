@@ -112,7 +112,7 @@ load_config()
 
 # Import FastAPI app after config is loaded
 from mangum import Mangum
-from main import app
+from smart_agent.main import app
 
 # Create Lambda handler
 handler = Mangum(app, lifespan="off")
