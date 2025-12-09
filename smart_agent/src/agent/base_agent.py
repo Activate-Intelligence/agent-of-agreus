@@ -22,11 +22,24 @@ from smart_agent.src.agent.agent_config import fetch_agent_config
 # Environment mode: "dev" or "prod"
 ENVIRONMENT_MODE = os.environ.get("ENVIRONMENT_MODE", "dev")
 
-# Initialize Anthropic client
-anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
-client = anthropic.Anthropic(api_key=anthropic_api_key)
-
 logger = Logger()
+
+# Lazy-loaded Anthropic client
+_client = None
+
+
+def get_anthropic_client():
+    """
+    Get or create the Anthropic client (lazy initialization).
+    This ensures the client is created after SSM parameters are loaded.
+    """
+    global _client
+    if _client is None:
+        anthropic_api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not anthropic_api_key:
+            raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
+        _client = anthropic.Anthropic(api_key=anthropic_api_key)
+    return _client
 
 
 def get_prompt_file_path(filename: str) -> str:
@@ -201,6 +214,9 @@ def llm(
 
     logger.info(f"Calling Anthropic API with model: {model_params.get('name', 'claude-sonnet-4-20250514')}")
     logger.info(f"Conversation has {len(messages)} messages")
+
+    # Get Anthropic client (lazy initialization)
+    client = get_anthropic_client()
 
     # Call Anthropic API
     response = client.messages.create(
