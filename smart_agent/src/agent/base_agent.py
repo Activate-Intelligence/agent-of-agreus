@@ -14,10 +14,10 @@ from datetime import datetime
 
 import anthropic
 
-from ..config.logger import Logger
-from ..utils.webhook import call_webhook_with_error, call_webhook_with_success
-from .prompt_extract import extract_prompts, load_skill_content
-from .agent_config import fetch_agent_config
+from smart_agent.src.config.logger import Logger
+from smart_agent.src.utils.webhook import call_webhook_with_error, call_webhook_with_success
+from smart_agent.src.agent.prompt_extract import extract_prompts, load_skill_content
+from smart_agent.src.agent.agent_config import fetch_agent_config
 
 # Environment mode: "dev" or "prod"
 ENVIRONMENT_MODE = os.environ.get("ENVIRONMENT_MODE", "dev")

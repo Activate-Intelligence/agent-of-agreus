@@ -8,8 +8,8 @@ import json
 import os
 from typing import Dict, Any
 
-from ..agent.agent_config import fetch_agent_config
-from ..config.logger import Logger
+from smart_agent.src.agent.agent_config import fetch_agent_config
+from smart_agent.src.config.logger import Logger
 
 logger = Logger()
 

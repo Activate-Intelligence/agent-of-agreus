@@ -6,8 +6,8 @@ Returns the status and results of a job.
 
 from typing import Dict, Any, Optional
 
-from ..utils.temp_db import get_job
-from ..config.logger import Logger
+from smart_agent.src.utils.temp_db import get_job
+from smart_agent.src.config.logger import Logger
 
 logger = Logger()
 

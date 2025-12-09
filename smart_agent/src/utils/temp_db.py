@@ -9,7 +9,7 @@ from typing import Dict, Any, Optional
 import boto3
 from botocore.exceptions import ClientError
 
-from ..config.logger import Logger
+from smart_agent.src.config.logger import Logger
 
 logger = Logger()
 

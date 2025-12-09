@@ -9,11 +9,11 @@ import asyncio
 from typing import Dict, Any, List
 from concurrent.futures import ThreadPoolExecutor
 
-from ..agent.base_agent import base_agent
-from ..utils.webhook import call_webhook_with_success, call_webhook_with_error
-from ..utils.helper import extract_input_value, generate_job_id
-from ..utils.temp_db import save_job, update_job_status
-from ..config.logger import Logger
+from smart_agent.src.agent.base_agent import base_agent
+from smart_agent.src.utils.webhook import call_webhook_with_success, call_webhook_with_error
+from smart_agent.src.utils.helper import extract_input_value, generate_job_id
+from smart_agent.src.utils.temp_db import save_job, update_job_status
+from smart_agent.src.config.logger import Logger
 
 logger = Logger()
 

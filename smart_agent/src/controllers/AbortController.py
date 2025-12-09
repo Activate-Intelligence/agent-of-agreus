@@ -6,9 +6,9 @@ Handles job cancellation requests.
 
 from typing import Dict, Any
 
-from ..utils.temp_db import get_job, update_job_status, delete_job
-from ..utils.webhook import call_webhook_with_error
-from ..config.logger import Logger
+from smart_agent.src.utils.temp_db import get_job, update_job_status, delete_job
+from smart_agent.src.utils.webhook import call_webhook_with_error
+from smart_agent.src.config.logger import Logger
 
 logger = Logger()
 

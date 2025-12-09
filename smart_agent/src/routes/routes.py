@@ -8,10 +8,10 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
 
-from ..controllers.ExecuteController import execute
-from ..controllers.DiscoverController import discover
-from ..controllers.StatusController import get_status
-from ..controllers.AbortController import abort
+from smart_agent.src.controllers.ExecuteController import execute
+from smart_agent.src.controllers.DiscoverController import discover
+from smart_agent.src.controllers.StatusController import get_status
+from smart_agent.src.controllers.AbortController import abort
 
 router = APIRouter()
 

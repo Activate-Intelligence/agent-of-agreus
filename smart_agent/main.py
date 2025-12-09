@@ -13,8 +13,8 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-from src.routes.routes import router
-from src.config.logger import Logger
+from smart_agent.src.routes.routes import router
+from smart_agent.src.config.logger import Logger
 
 logger = Logger()
 

@@ -5,7 +5,7 @@ Webhook utilities for sending status updates and results.
 import os
 import requests
 from typing import Dict, Any, Optional
-from ..config.logger import Logger
+from smart_agent.src.config.logger import Logger
 
 logger = Logger()
 
