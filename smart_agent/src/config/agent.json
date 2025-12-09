@@ -10,41 +10,22 @@
     {
       "label": "Instructions",
       "type": "longText",
-      "name": "instructions",
-      "validation": {
-        "required": false
-      }
+      "name": "instructions"
     },
     {
       "label": "Payload",
       "type": "longText",
-      "name": "payload",
-      "validation": {
-        "required": true,
-        "error": "Payload is required"
-      }
+      "name": "payload"
     },
     {
       "label": "Thread ID",
       "type": "longText",
-      "name": "threadId",
-      "validation": {
-        "required": false
-      }
+      "name": "threadId"
     }
   ],
   "outputs": [
-    {
-      "label": "output",
-      "type": "longText"
-    },
-    {
-      "label": "explanation",
-      "type": "longText"
-    },
-    {
-      "label": "threadId",
-      "type": "shortText"
-    }
+    {"label": "output", "type": "longText"},
+    {"label": "explanation", "type": "longText"},
+    {"label": "threadId", "type": "shortText"}
   ]
 }
