@@ -11,7 +11,6 @@
       "name": "instructions",
       "label": "Instructions",
       "type": "longText",
-      "description": "Specific instructions or context for the query",
       "validation": {
         "required": false
       }
@@ -20,7 +19,6 @@
       "name": "payload",
       "label": "Payload",
       "type": "longText",
-      "description": "The user's question or request about family office compensation",
       "validation": {
         "required": true
       }
@@ -29,7 +27,6 @@
       "name": "threadId",
       "label": "Thread ID",
       "type": "longText",
-      "description": "Thread ID for conversation continuity (conversation history as JSON)",
       "validation": {
         "required": false
       }
@@ -39,20 +36,17 @@
     {
       "label": "output",
       "name": "output",
-      "type": "longText",
-      "description": "The agent's response to the query"
+      "type": "longText"
     },
     {
       "label": "explanation",
       "name": "explanation",
-      "type": "longText",
-      "description": "Reasoning and explanation behind the response"
+      "type": "longText"
     },
     {
       "label": "threadId",
       "name": "threadId",
-      "type": "shortText",
-      "description": "Thread ID for continuing the conversation"
+      "type": "shortText"
     }
   ]
 }
