@@ -1,0 +1,149 @@
+name: Deploy Lambda
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  FUNCTION_NAME: agent-of-agreus
+  ENVIRONMENT: dev
+  S3_BUCKET: spritz-agent-deployments
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/github-actions-role
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Create deployment package
+        run: |
+          # Create package directory
+          mkdir -p package
+
+          # Install dependencies
+          pip install -r smart_agent/requirements.txt -t package/
+
+          # Copy source code
+          cp -r smart_agent package/
+          cp lambda_handler.py package/
+          cp -r Prompt package/
+          cp -r Skill package/
+
+          # Create deployment zip
+          cd package && zip -r ../deployment.zip . -x "*.pyc" -x "__pycache__/*" -x "*.dist-info/*"
+
+      - name: Upload to S3
+        run: |
+          aws s3 cp deployment.zip s3://${{ env.S3_BUCKET }}/${{ env.FUNCTION_NAME }}/deployment.zip
+
+      - name: Check if Lambda exists
+        id: check_lambda
+        run: |
+          if aws lambda get-function --function-name ${{ env.FUNCTION_NAME }}-${{ env.ENVIRONMENT }} 2>/dev/null; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Lambda function (if not exists)
+        if: steps.check_lambda.outputs.exists == 'false'
+        run: |
+          # Create IAM role for Lambda
+          aws iam create-role \
+            --role-name ${{ env.FUNCTION_NAME }}-${{ env.ENVIRONMENT }}-role \
+            --assume-role-policy-document '{
+              "Version": "2012-10-17",
+              "Statement": [{
+                "Effect": "Allow",
+                "Principal": {"Service": "lambda.amazonaws.com"},
+                "Action": "sts:AssumeRole"
+              }]
+            }' || true
+
+          # Attach policies
+          aws iam attach-role-policy \
+            --role-name ${{ env.FUNCTION_NAME }}-${{ env.ENVIRONMENT }}-role \
+            --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole || true
+
+          aws iam attach-role-policy \
+            --role-name ${{ env.FUNCTION_NAME }}-${{ env.ENVIRONMENT }}-role \
+            --policy-arn arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess || true
+
+          # Wait for role to propagate
+          sleep 10
+
+          # Create Lambda function
+          aws lambda create-function \
+            --function-name ${{ env.FUNCTION_NAME }}-${{ env.ENVIRONMENT }} \
+            --runtime python3.11 \
+            --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ env.FUNCTION_NAME }}-${{ env.ENVIRONMENT }}-role \
+            --handler lambda_handler.lambda_handler \
+            --code S3Bucket=${{ env.S3_BUCKET }},S3Key=${{ env.FUNCTION_NAME }}/deployment.zip \
+            --timeout 900 \
+            --memory-size 512 \
+            --environment "Variables={AGENT_NAME=${{ env.FUNCTION_NAME }},ENVIRONMENT=${{ env.ENVIRONMENT }},SSM_PREFIX=/app/${{ env.FUNCTION_NAME }}/${{ env.ENVIRONMENT }},ENVIRONMENT_MODE=prod}"
+
+      - name: Update Lambda function
+        if: steps.check_lambda.outputs.exists == 'true'
+        run: |
+          aws lambda update-function-code \
+            --function-name ${{ env.FUNCTION_NAME }}-${{ env.ENVIRONMENT }} \
+            --s3-bucket ${{ env.S3_BUCKET }} \
+            --s3-key ${{ env.FUNCTION_NAME }}/deployment.zip
+
+      - name: Create/Update Function URL
+        run: |
+          # Check if function URL exists
+          if aws lambda get-function-url-config --function-name ${{ env.FUNCTION_NAME }}-${{ env.ENVIRONMENT }} 2>/dev/null; then
+            echo "Function URL already exists"
+          else
+            aws lambda create-function-url-config \
+              --function-name ${{ env.FUNCTION_NAME }}-${{ env.ENVIRONMENT }} \
+              --auth-type NONE \
+              --cors '{
+                "AllowOrigins": ["*"],
+                "AllowMethods": ["GET", "POST", "OPTIONS"],
+                "AllowHeaders": ["*"]
+              }'
+
+            # Add permission for public access
+            aws lambda add-permission \
+              --function-name ${{ env.FUNCTION_NAME }}-${{ env.ENVIRONMENT }} \
+              --statement-id FunctionURLPublicAccess \
+              --action lambda:InvokeFunctionUrl \
+              --principal "*" \
+              --function-url-auth-type NONE || true
+          fi
+
+      - name: Get Function URL
+        id: get_url
+        run: |
+          URL=$(aws lambda get-function-url-config --function-name ${{ env.FUNCTION_NAME }}-${{ env.ENVIRONMENT }} --query 'FunctionUrl' --output text)
+          echo "function_url=$URL" >> $GITHUB_OUTPUT
+          echo "Lambda Function URL: $URL"
+
+      - name: Test deployment
+        run: |
+          URL="${{ steps.get_url.outputs.function_url }}"
+          echo "Testing discover endpoint..."
+          curl -s "${URL}discover" | head -100

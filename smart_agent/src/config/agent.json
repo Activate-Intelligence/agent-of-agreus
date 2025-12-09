@@ -1,0 +1,58 @@
+{
+  "name": "Agreus Family Office Benchmark Agent",
+  "description": "Expert agent for the 2025 Agreus/KPMG Global Family Office Compensation Benchmark Report. Provides detailed information on family office compensation, salaries, bonuses, LTIPs, benefits, workforce trends, investment strategies, recruitment patterns, and governance practices across multiple regions.",
+  "icon": "https://s3.amazonaws.com/flowxo-static/icons/flow.png",
+  "color": "#1E3A5F",
+  "capabilities": "Answers questions about family office compensation benchmarks, regional salary data (UK, Europe, USA, Asia, Australia, Middle East), bonus structures, LTIP design, hiring trends, investment strategies, and governance practices. Supports multi-turn conversations with thread continuity.",
+  "applications": ["oldfashioned"],
+  "maxThreads": 1,
+  "inputs": [
+    {
+      "name": "instructions",
+      "label": "Instructions",
+      "type": "longText",
+      "description": "Specific instructions or context for the query",
+      "validation": {
+        "required": false
+      }
+    },
+    {
+      "name": "payload",
+      "label": "Payload",
+      "type": "longText",
+      "description": "The user's question or request about family office compensation",
+      "validation": {
+        "required": true
+      }
+    },
+    {
+      "name": "threadId",
+      "label": "Thread ID",
+      "type": "longText",
+      "description": "Thread ID for conversation continuity (conversation history as JSON)",
+      "validation": {
+        "required": false
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "label": "output",
+      "name": "output",
+      "type": "longText",
+      "description": "The agent's response to the query"
+    },
+    {
+      "label": "explanation",
+      "name": "explanation",
+      "type": "longText",
+      "description": "Reasoning and explanation behind the response"
+    },
+    {
+      "label": "threadId",
+      "name": "threadId",
+      "type": "shortText",
+      "description": "Thread ID for continuing the conversation"
+    }
+  ]
+}
