@@ -13,6 +13,7 @@ from typing import Tuple, Optional, Dict, Any, List
 from datetime import datetime
 
 import anthropic
+import markdown
 
 from smart_agent.src.config.logger import Logger
 from smart_agent.src.utils.webhook import call_webhook_with_error, call_webhook_with_success
@@ -26,6 +27,10 @@ logger = Logger()
 
 # Lazy-loaded Anthropic client
 _client = None
+
+# In-memory thread storage (maps thread UUIDs to conversation history)
+# In production, this should be replaced with DynamoDB or similar persistent storage
+_thread_storage: Dict[str, List[Dict[str, str]]] = {}
 
 
 def get_anthropic_client():
@@ -83,15 +88,12 @@ def get_skill_dir() -> str:
     return 'Skill'
 
 
-def parse_thread_history(thread_id: Optional[str]) -> List[Dict[str, str]]:
+def get_thread_history(thread_id: Optional[str]) -> List[Dict[str, str]]:
     """
-    Parse thread ID (JSON-encoded conversation history) into message list.
-
-    Anthropic doesn't have a native thread ID like OpenAI's previous_response_id,
-    so we implement threading by storing the full conversation history as JSON.
+    Retrieve conversation history from thread storage by UUID.
 
     Args:
-        thread_id: JSON string containing conversation history, or None for new conversation
+        thread_id: UUID string identifying the conversation thread, or None for new conversation
 
     Returns:
         List of message dictionaries with 'role' and 'content' keys
@@ -99,27 +101,56 @@ def parse_thread_history(thread_id: Optional[str]) -> List[Dict[str, str]]:
     if not thread_id:
         return []
 
-    try:
-        history = json.loads(thread_id)
-        if isinstance(history, list):
-            return history
-        return []
-    except (json.JSONDecodeError, TypeError):
-        logger.warning(f"Failed to parse thread history: {thread_id}")
-        return []
+    # Look up thread history by UUID
+    history = _thread_storage.get(thread_id, [])
+    if history:
+        logger.info(f"Retrieved thread history for {thread_id}: {len(history)} messages")
+    else:
+        logger.info(f"No history found for thread {thread_id}, starting new conversation")
+
+    return history
 
 
-def create_thread_id(messages: List[Dict[str, str]]) -> str:
+def save_thread_history(thread_id: str, messages: List[Dict[str, str]]) -> str:
     """
-    Create a thread ID from conversation history.
+    Save conversation history to thread storage.
 
     Args:
+        thread_id: Existing UUID to update, or None to create new
         messages: List of message dictionaries
 
     Returns:
-        JSON-encoded string of the conversation history
+        UUID string identifying the conversation thread
     """
-    return json.dumps(messages, ensure_ascii=False)
+    # Generate new UUID if needed, otherwise use existing
+    if not thread_id:
+        thread_id = str(uuid.uuid4())
+        logger.info(f"Created new thread: {thread_id}")
+
+    # Store the conversation history
+    _thread_storage[thread_id] = messages
+    logger.info(f"Saved {len(messages)} messages to thread {thread_id}")
+
+    return thread_id
+
+
+def markdown_to_html(text: str) -> str:
+    """
+    Convert markdown text to HTML.
+
+    Args:
+        text: Markdown formatted text
+
+    Returns:
+        HTML formatted text
+    """
+    if not text:
+        return ""
+
+    # Convert markdown to HTML
+    html = markdown.markdown(text)
+
+    return html
 
 
 def extract_reasoning_summary(response_text: str) -> str:
@@ -173,7 +204,7 @@ def llm(
     Args:
         payload: The user's question or request
         instructions: Optional specific instructions for the query
-        thread_id: JSON-encoded conversation history for thread continuity
+        thread_id: UUID of the conversation thread for continuity
 
     Returns:
         Tuple of (response_text, explanation, new_thread_id)
@@ -193,8 +224,8 @@ def llm(
         if skill_content:
             system_prompt = f"{system_prompt}\n\n## Detailed Reference Data\n\n{skill_content}"
 
-    # Parse existing conversation history
-    conversation_history = parse_thread_history(thread_id)
+    # Retrieve existing conversation history by UUID
+    conversation_history = get_thread_history(thread_id)
 
     # Build messages for Anthropic API
     messages = []
@@ -227,29 +258,32 @@ def llm(
         messages=messages
     )
 
-    # Extract response text
-    response_text = ""
+    # Extract response text (markdown format from LLM)
+    response_markdown = ""
     for block in response.content:
         if block.type == "text":
-            response_text += block.text
+            response_markdown += block.text
 
-    response_text = response_text.strip()
+    response_markdown = response_markdown.strip()
 
     # Generate explanation
-    explanation = extract_reasoning_summary(response_text)
+    explanation = extract_reasoning_summary(response_markdown)
 
-    # Update conversation history for thread continuity
+    # Update conversation history with markdown (for context continuity)
     messages.append({
         "role": "assistant",
-        "content": response_text
+        "content": response_markdown
     })
 
-    # Create new thread ID with updated history
-    new_thread_id = create_thread_id(messages)
+    # Save updated history and get thread UUID
+    new_thread_id = save_thread_history(thread_id, messages)
+
+    # Convert markdown to HTML for output
+    response_html = markdown_to_html(response_markdown)
 
     logger.info(f"Response generated. Tokens used: {response.usage.input_tokens} in, {response.usage.output_tokens} out")
 
-    return response_text, explanation, new_thread_id
+    return response_html, explanation, new_thread_id
 
 
 def base_agent(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], str, str]:
