@@ -3,21 +3,25 @@ Old Fashioned Agent using Anthropic API with threading support.
 
 This agent provides expert knowledge about the 2025 Agreus/KPMG Global Family Office
 Compensation Benchmark Report. It supports multi-turn conversations by maintaining
-conversation history through a thread ID (JSON-encoded message history).
+conversation history through a thread ID stored in DynamoDB.
+
+Features:
+- Persistent thread storage via DynamoDB
+- Smart skill loading based on query classification
+- HTML output conversion from markdown
 """
 
 import os
-import json
-import uuid
 from typing import Tuple, Optional, Dict, Any, List
-from datetime import datetime
 
 import anthropic
 import markdown
 
 from smart_agent.src.config.logger import Logger
 from smart_agent.src.utils.webhook import call_webhook_with_error, call_webhook_with_success
-from smart_agent.src.agent.prompt_extract import extract_prompts, load_skill_content
+from smart_agent.src.utils.thread_storage import get_thread, save_thread
+from smart_agent.src.agent.prompt_extract import extract_prompts
+from smart_agent.src.agent.skill_loader import load_relevant_skills, get_skill_dir
 from smart_agent.src.agent.agent_config import fetch_agent_config
 
 # Environment mode: "dev" or "prod"
@@ -27,10 +31,6 @@ logger = Logger()
 
 # Lazy-loaded Anthropic client
 _client = None
-
-# In-memory thread storage (maps thread UUIDs to conversation history)
-# In production, this should be replaced with DynamoDB or similar persistent storage
-_thread_storage: Dict[str, List[Dict[str, str]]] = {}
 
 
 def get_anthropic_client():
@@ -73,67 +73,6 @@ def get_prompt_file_path(filename: str) -> str:
     return f'Prompt/{filename}'
 
 
-def get_skill_dir() -> str:
-    """Get the skill directory path."""
-    paths = [
-        'Skill',
-        '/var/task/Skill',
-        '/tmp/Skill',
-    ]
-
-    for path in paths:
-        if os.path.exists(path):
-            return path
-
-    return 'Skill'
-
-
-def get_thread_history(thread_id: Optional[str]) -> List[Dict[str, str]]:
-    """
-    Retrieve conversation history from thread storage by UUID.
-
-    Args:
-        thread_id: UUID string identifying the conversation thread, or None for new conversation
-
-    Returns:
-        List of message dictionaries with 'role' and 'content' keys
-    """
-    if not thread_id:
-        return []
-
-    # Look up thread history by UUID
-    history = _thread_storage.get(thread_id, [])
-    if history:
-        logger.info(f"Retrieved thread history for {thread_id}: {len(history)} messages")
-    else:
-        logger.info(f"No history found for thread {thread_id}, starting new conversation")
-
-    return history
-
-
-def save_thread_history(thread_id: str, messages: List[Dict[str, str]]) -> str:
-    """
-    Save conversation history to thread storage.
-
-    Args:
-        thread_id: Existing UUID to update, or None to create new
-        messages: List of message dictionaries
-
-    Returns:
-        UUID string identifying the conversation thread
-    """
-    # Generate new UUID if needed, otherwise use existing
-    if not thread_id:
-        thread_id = str(uuid.uuid4())
-        logger.info(f"Created new thread: {thread_id}")
-
-    # Store the conversation history
-    _thread_storage[thread_id] = messages
-    logger.info(f"Saved {len(messages)} messages to thread {thread_id}")
-
-    return thread_id
-
-
 def markdown_to_html(text: str) -> str:
     """
     Convert markdown text to HTML.
@@ -153,14 +92,20 @@ def markdown_to_html(text: str) -> str:
     return html
 
 
-def extract_reasoning_summary(response_text: str) -> str:
+def extract_reasoning_summary(response_text: str, loaded_files: Optional[List[str]] = None) -> str:
     """
     Extract a reasoning summary from the response.
 
     For Old Fashioned agents, we provide an explanation of how the response
     was derived based on the benchmark data.
+
+    Args:
+        response_text: The LLM's response text
+        loaded_files: List of skill files that were loaded for this query
+
+    Returns:
+        Explanation string describing data sources
     """
-    # Generate a brief explanation based on the response content
     if not response_text:
         return "No response generated."
 
@@ -168,7 +113,7 @@ def extract_reasoning_summary(response_text: str) -> str:
     topics = []
 
     if any(term in response_text.lower() for term in ['salary', 'compensation', '£', '$', '€']):
-        topics.append("compensation data from the benchmark report")
+        topics.append("compensation data")
 
     if any(term in response_text.lower() for term in ['bonus', 'ltip', 'incentive']):
         topics.append("bonus and incentive structures")
@@ -185,10 +130,19 @@ def extract_reasoning_summary(response_text: str) -> str:
     if any(term in response_text.lower() for term in ['hiring', 'recruitment', 'talent', 'team']):
         topics.append("recruitment and talent trends")
 
+    # Build explanation
+    base = "2025 Agreus/KPMG Global Family Office Compensation Benchmark Report (585 survey responses, 20 qualitative interviews)"
+
     if topics:
-        explanation = f"Response derived from {', '.join(topics)} in the 2025 Agreus/KPMG Global Family Office Compensation Benchmark Report (585 survey responses, 20 qualitative interviews)."
+        explanation = f"Response derived from {', '.join(topics)} in the {base}."
     else:
-        explanation = "Response based on the 2025 Agreus/KPMG Global Family Office Compensation Benchmark Report data."
+        explanation = f"Response based on the {base}."
+
+    # Add loaded files info
+    if loaded_files and len(loaded_files) > 1:
+        file_names = [f.replace('references/', '').replace('.md', '') for f in loaded_files if f != 'SKILL.md']
+        if file_names:
+            explanation += f" Sources: {', '.join(file_names)}."
 
     return explanation
 
@@ -197,9 +151,9 @@ def llm(
     payload: str,
     instructions: Optional[str] = None,
     thread_id: Optional[str] = None
-) -> Tuple[str, str, str]:
+) -> Tuple[str, str, str, List[str]]:
     """
-    Call the Anthropic API with threading support.
+    Call the Anthropic API with threading support and smart skill loading.
 
     Args:
         payload: The user's question or request
@@ -207,7 +161,7 @@ def llm(
         thread_id: UUID of the conversation thread for continuity
 
     Returns:
-        Tuple of (response_text, explanation, new_thread_id)
+        Tuple of (response_html, explanation, new_thread_id, loaded_skill_files)
     """
     # Load prompt template
     prompt_file_path = get_prompt_file_path('AgentPrompt.yaml')
@@ -217,15 +171,18 @@ def llm(
         payload=payload
     )
 
-    # Load skill content and append to system prompt
+    # Smart skill loading: only load relevant files based on query
     skill_dir = get_skill_dir()
+    loaded_files = []
     if os.path.exists(skill_dir):
-        skill_content = load_skill_content(skill_dir)
+        skill_content, loaded_files = load_relevant_skills(skill_dir, payload)
         if skill_content:
-            system_prompt = f"{system_prompt}\n\n## Detailed Reference Data\n\n{skill_content}"
+            system_prompt = f"{system_prompt}\n\n## Reference Data\n\n{skill_content}"
 
-    # Retrieve existing conversation history by UUID
-    conversation_history = get_thread_history(thread_id)
+    logger.info(f"Loaded {len(loaded_files)} skill files for query")
+
+    # Retrieve existing conversation history from DynamoDB
+    conversation_history = get_thread(thread_id)
 
     # Build messages for Anthropic API
     messages = []
@@ -266,8 +223,8 @@ def llm(
 
     response_markdown = response_markdown.strip()
 
-    # Generate explanation
-    explanation = extract_reasoning_summary(response_markdown)
+    # Generate explanation with loaded files info
+    explanation = extract_reasoning_summary(response_markdown, loaded_files)
 
     # Update conversation history with markdown (for context continuity)
     messages.append({
@@ -275,15 +232,15 @@ def llm(
         "content": response_markdown
     })
 
-    # Save updated history and get thread UUID
-    new_thread_id = save_thread_history(thread_id, messages)
+    # Save updated history to DynamoDB and get thread UUID
+    new_thread_id = save_thread(thread_id, messages)
 
     # Convert markdown to HTML for output
     response_html = markdown_to_html(response_markdown)
 
     logger.info(f"Response generated. Tokens used: {response.usage.input_tokens} in, {response.usage.output_tokens} out")
 
-    return response_html, explanation, new_thread_id
+    return response_html, explanation, new_thread_id, loaded_files
 
 
 def base_agent(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], str, str]:
@@ -315,12 +272,14 @@ def base_agent(payload: Dict[str, Any]) -> Tuple[Dict[str, Any], str, str]:
             }
         })
 
-        # Call LLM with threading support
-        response_text, explanation, new_thread_id = llm(
+        # Call LLM with threading support and smart skill loading
+        response_text, explanation, new_thread_id, loaded_files = llm(
             payload=user_payload,
             instructions=instructions,
             thread_id=thread_id
         )
+
+        logger.info(f"Skill files used: {loaded_files}")
 
         # Prepare response
         resp = {

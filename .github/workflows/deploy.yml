@@ -7,10 +7,11 @@ on:
   workflow_dispatch:
 
 env:
-  AWS_REGION: us-east-1
+  AWS_REGION: eu-west-2
   FUNCTION_NAME: agent-of-agreus
   ENVIRONMENT: dev
-  S3_BUCKET: spritz-agent-deployments
+  S3_BUCKET: spritz-agent-deployments-eu
+  THREADS_TABLE: agent-threads
 
 permissions:
   id-token: write
@@ -89,6 +90,10 @@ jobs:
             --role-name ${{ env.FUNCTION_NAME }}-${{ env.ENVIRONMENT }}-role \
             --policy-arn arn:aws:iam::aws:policy/AmazonSSMReadOnlyAccess || true
 
+          aws iam attach-role-policy \
+            --role-name ${{ env.FUNCTION_NAME }}-${{ env.ENVIRONMENT }}-role \
+            --policy-arn arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess || true
+
           # Wait for role to propagate
           sleep 10
 
@@ -101,7 +106,7 @@ jobs:
             --code S3Bucket=${{ env.S3_BUCKET }},S3Key=${{ env.FUNCTION_NAME }}/deployment.zip \
             --timeout 900 \
             --memory-size 512 \
-            --environment "Variables={AGENT_NAME=${{ env.FUNCTION_NAME }},ENVIRONMENT=${{ env.ENVIRONMENT }},SSM_PREFIX=/app/${{ env.FUNCTION_NAME }}/${{ env.ENVIRONMENT }},ENVIRONMENT_MODE=prod}"
+            --environment "Variables={AGENT_NAME=${{ env.FUNCTION_NAME }},ENVIRONMENT=${{ env.ENVIRONMENT }},SSM_PREFIX=/app/${{ env.FUNCTION_NAME }}/${{ env.ENVIRONMENT }},ENVIRONMENT_MODE=prod,THREADS_TABLE=${{ env.THREADS_TABLE }}}"
 
       - name: Update Lambda function
         if: steps.check_lambda.outputs.exists == 'true'
